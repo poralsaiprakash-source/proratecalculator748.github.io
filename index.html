@@ -108,21 +108,19 @@ tfoot td:nth-child(6){color:var(--tax);background:var(--tax-bg)}
 <div class="set">
   <div><label for="mode">Discount type</label>
     <select id="mode"><option value="amount">Total discount amount (prorated)</option><option value="percent">Discount % on each item</option></select></div>
-  <div><label for="disc" id="discLabel">Total discount amount (₹)</label><input id="disc" type="text" inputmode="decimal" autocomplete="off" value="500"><span class="ev" id="discEv"></span></div>
-  <div><label for="taxType">Tax type</label>
-    <select id="taxType"><option value="percent">Percentage (%)</option><option value="amount">Amount (₹)</option></select></div>
-  <div><label for="tax" id="taxLabel">Tax (%)</label><input id="tax" type="text" inputmode="decimal" autocomplete="off" value="16"><span class="ev" id="taxEv"></span></div>
+  <div><label for="disc" id="discLabel">Total discount amount (₹)</label><input id="disc" type="text" inputmode="text" autocomplete="off" value=""><span class="ev" id="discEv"></span></div>
+  <div><label for="tax" id="taxLabel">Total tax amount (+ or −)</label><input id="tax" type="text" inputmode="text" autocomplete="off" value=""><span class="ev" id="taxEv"></span></div>
 </div>
-<p class="hint">Every amount, discount and tax box accepts formulas with <code>+ − * / %</code> and brackets: <code>2+2</code>, <code>100*5+20</code>, <code>(500-50)/3</code>. <code>100+10%</code> adds 10% of 100 (= 110); <code>100*10%</code> is 10; <code>a % b</code> is the remainder. In a percent field, <code>10%</code> simply means 10. Click ⓘ beside an amount to see the full calculation.</p>
 
 <div class="step"><i>2</i>List your items</div>
 <div class="wrap">
 <table>
-<thead><tr><th>Item</th><th>Price (₹)</th><th>% of total</th><th>Discount (−)</th><th>Price after discount</th><th id="taxHead">Tax (+) %</th><th>You pay</th><th></th></tr></thead>
+<thead><tr><th>Item</th><th>Price (₹)</th><th>% of total</th><th>Discount (−)</th><th>Price after discount</th><th id="taxHead">Tax / Adj. (±)</th><th>You pay</th><th></th></tr></thead>
 <tbody id="rows"></tbody>
 <tfoot><tr><td>Total</td><td id="tA">0.00</td><td id="tS">0%</td><td id="tD">0.00</td><td id="tAD">0.00</td><td id="tT">0.00</td><td id="tF">0.00</td><td></td></tr></tfoot>
 </table>
 </div>
+<div class="hint" id="empty" style="padding:12px 4px">No items yet. Click <b>+ Add item</b> or tap <kbd>Alt</kbd> to add a blank row.</div>
 <div class="err" id="err" role="status"></div>
 <div class="bar"><button id="add">+ Add item</button><span class="hint" style="margin:0">or tap <kbd>Alt</kbd> on its own</span></div>
 
@@ -133,7 +131,7 @@ tfoot td:nth-child(6){color:var(--tax);background:var(--tax-bg)}
   <div class="card c1"><span>Original total</span><strong id="sO">0.00</strong></div>
   <div class="card c2"><span>Total discount</span><strong id="sD">0.00</strong></div>
   <div class="card c3"><span>After discount</span><strong id="sAD">0.00</strong></div>
-  <div class="card c4"><span id="sTL">Total tax</span><strong id="sT">0.00</strong></div>
+  <div class="card c4"><span id="sTL">Total tax / adj.</span><strong id="sT">0.00</strong></div>
 </div>
 <div class="final"><span>Final total to pay</span><b id="sF">0.00</b></div>
 </div>
@@ -144,7 +142,7 @@ tfoot td:nth-child(6){color:var(--tax);background:var(--tax-bg)}
 <script>
 var rowsEl=document.getElementById("rows"),n=0;
 var $=function(id){return document.getElementById(id)};
-var f=function(c){return (c/100).toFixed(2)};
+var f=function(c){return (c/100).toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2})};
 
 /* ---------- Safe formula evaluator (no eval) ----------
    Grammar: expr = term {(+|-) term}; term = unary {(*|/|%) unary};
@@ -217,6 +215,27 @@ function readField(input,evEl,pctField){
   return r;
 }
 
+/* Tax / adjustment field: any +,-,%,fixed formula, applied to a base amount B as  B <expr>.
+   Because the result is  c + (1+k)*B,  we evaluate at B=0 and B=1 to get the fixed part c and the percent-like part k. */
+function readAdj(input,evEl,isDisc){
+  var raw=input.value,s=raw.replace(/[₹,\s]/g,""),res={expr:raw,norm:"",src:"",c:0,k:0,empty:false,bad:false};
+  if(s==="")res.empty=true;
+  else{
+    var pre=/^[+\-*\/x×÷]/i.test(s)?"":"+";
+    var r0=evaluate("0"+pre+s,false),r1=evaluate("1"+pre+s,false);
+    if(isNaN(r0.v)||isNaN(r1.v))res.bad=true;
+    else{res.c=r0.v;res.k=r1.v-r0.v-1;res.src=pre+s;res.norm=(pre+raw.trim()).replace(/\s+/g,"");}
+  }
+  if(Math.abs(res.k)<1e-12)res.k=0;
+  input.classList.toggle("bad",res.bad);
+  var parts=[];
+  if(res.k!==0){var kp=Math.round(res.k*1e6)/1e4;parts.push((kp<0?"−":"+")+Math.abs(kp)+(isDisc?"% of the total bill":"% of each item"));}
+  if(res.c!==0)parts.push((res.c<0?"−":"+")+Math.abs(Math.round(res.c*100)/100).toFixed(2)+(isDisc?" fixed":" fixed, shared by price"));
+  evEl.classList.toggle("bad",res.bad);
+  evEl.textContent=res.bad?"Invalid formula":(res.empty?"":parts.join("; ")||"No change");
+  return res;
+}
+
 /* Split `total` cents across weights, largest-remainder so parts add up exactly */
 function share(total,w){
   var S=w.reduce(function(x,y){return x+y},0);
@@ -229,24 +248,24 @@ function share(total,w){
 }
 
 function addRow(name,amt,focus){
-  n++;
   var tr=document.createElement("tr");
-  tr.innerHTML='<td><input type="text" class="nm"></td>'+
+  tr.innerHTML='<td><input type="text" class="nm" placeholder="Item name / description" autocomplete="off"></td>'+
     '<td><div class="amtbox"><input type="text" inputmode="decimal" autocomplete="off" class="amt" placeholder="e.g. 100*5+20"><button class="inf" type="button" aria-label="Show calculation" aria-expanded="false" title="Show calculation">&#9432;</button></div><span class="ev"></span></td>'+
     '<td class="sh">0%</td><td class="d">0.00</td><td class="ad">0.00</td><td class="tx">0.00</td><td class="fi">0.00</td>'+
     '<td><button class="x" aria-label="Remove item">&#10005;</button></td>';
-  tr.querySelector(".nm").value=name||"Item "+n;
-  tr.querySelector(".amt").value=amt==null?"":amt;
+  if(name)tr.querySelector(".nm").value=name;   /* stays blank unless a name is given */
+  if(amt!=null&&amt!=="")tr.querySelector(".amt").value=amt;   /* blank by default */
   rowsEl.appendChild(tr);
-  if(focus){tr.querySelector(".amt").focus();tr.scrollIntoView({block:"nearest"});}
+  if(focus)tr.scrollIntoView({block:"nearest"});   /* new row is scrolled into view; no automatic entry prompt/focus */
 }
 
 function calc(){
-  var mode=$("mode").value, taxType=$("taxType").value, anyBad=false;
-  var dvR=readField($("disc"),$("discEv"),mode==="percent"), dv=dvR.v;
-  var trR=readField($("tax"),$("taxEv"),taxType==="percent"), tr=trR.v;
+  var mode=$("mode").value, anyBad=false;
+  var dvR=mode==="percent"?readField($("disc"),$("discEv"),true):readAdj($("disc"),$("discEv"),true), dv=dvR.v||0;   /* empty = 0 */
+  var trR=readAdj($("tax"),$("taxEv"));
   anyBad=dvR.bad||trR.bad;
   var rows=[].slice.call(rowsEl.children);
+  $("empty").hidden=rows.length>0;
   var infos=rows.map(function(r){
     var x=readField(r.querySelector(".amt"),r.querySelector(".ev"),false);
     if(x.bad)anyBad=true;
@@ -260,24 +279,24 @@ function calc(){
   if(mode==="percent"){
     d=a.map(function(x){return Math.round(x*dv/100)});
   }else{
-    var D=Math.round(dv*100);
+    /* manual total discount: fixed part + percent of the total bill, e.g. 100, +100, 10%, 100+50, (500-100)/2 */
+    var D=Math.round(dvR.c*100+dvR.k*S);
     if(D>S&&S>0){D=S;err="Discount is larger than the total, so it was capped at "+f(S)+".";}
-    d=share(D,a);
+    d=share(Math.abs(D),a).map(function(x){return D<0?-x:x});
   }
   var ad=a.map(function(x,i){return x-d[i]});
   var ADs=ad.reduce(function(x,y){return x+y},0);
 
-  /* tax */
-  var tx;
-  if(taxType==="percent"){
-    tx=ad.map(function(x){return Math.round(x*tr/100)});
-  }else{
-    tx=share(Math.max(0,Math.round(tr*100)),ad);   /* fixed amount, shared by discounted price */
-  }
+  /* tax / adjustment: k = percent-like part (per item), c = fixed part (shared by discounted price) */
+  var kp=ad.map(function(x){return Math.round(x*trR.k)});
+  var C=Math.round(trR.c*100);
+  var cs=share(Math.abs(C),ad).map(function(x){return C<0?-x:x});
+  var nShare=ad.filter(function(x){return x>0}).length;
+  var tx=ad.map(function(x,i){return kp[i]+cs[i]});
 
   var tot={a:0,d:0,ad:0,t:0,f:0};
   rows.forEach(function(r,i){
-    var fin=ad[i]+tx[i];r._i.a=a[i];r._i.d=d[i];r._i.ad=ad[i];r._i.tx=tx[i];r._i.fin=fin;
+    var fin=ad[i]+tx[i];r._i.a=a[i];r._i.d=d[i];r._i.ad=ad[i];r._i.tx=tx[i];r._i.kp=kp[i];r._i.cs=cs[i];r._i.fin=fin;
     r.querySelector(".sh").textContent=S?(a[i]/S*100).toFixed(1)+"%":"0%";
     r.querySelector(".d").textContent=f(d[i]);
     r.querySelector(".ad").textContent=f(ad[i]);
@@ -290,27 +309,24 @@ function calc(){
   set("sO",tot.a);set("sD",tot.d);set("sAD",tot.ad);set("sT",tot.t);set("sF",tot.f);
   $("tS").textContent=S?"100%":"0%";
 
-  ctx={dvR:dvR,trR:trR,mode:mode,taxType:taxType,S:S,ADs:ADs,Dtot:tot.d};
+  ctx={dvR:dvR,adj:trR,C:C,nShare:nShare,mode:mode,S:S,ADs:ADs,Dtot:tot.d};
   if(openRow)renderPop();
 
   /* tax labels */
-  var tp=taxType==="percent";
-  $("taxLabel").textContent=tp?"Tax (%)":"Tax (₹, total amount)";
-  $("taxHead").textContent="Tax (+) "+(tp?"%":"₹");
-  $("sTL").textContent=tp?"Total tax ("+(Math.round(tr*1e4)/1e4)+"%)":"Total tax (fixed ₹)";
   if(anyBad)err="Some formulas are not valid and were counted as 0. Use numbers, + - * / % and brackets.";
   $("err").textContent=err;
 
   /* explanation */
-  var taxTxt=tp?(Math.round(tr*1e4)/1e4)+"% tax is added to what is left."
-              :"a fixed tax of "+f(Math.round(tr*100))+" is shared by the discounted prices of the items.";
+  var taxTxt=trR.empty?"no tax is added.":"your tax / adjustment <b>"+esc(trR.norm||"")+"</b> is applied to what is left"+(trR.c!==0&&rows.length>1?" (a fixed amount is shared by price)":"")+".";
   var ex="",i0=a.findIndex(function(x){return x>0});
   if(mode==="percent"){
-    ex="<b>How it works:</b> every item gets "+(Math.round(dv*1e4)/1e4)+"% off its price. Then "+taxTxt;
+    ex=dv===0?"<b>How it works:</b> no discount is entered. Then "+taxTxt:"<b>How it works:</b> every item gets "+(Math.round(dv*1e4)/1e4)+"% off its price. Then "+taxTxt;
+  }else if(D===0){
+    ex="<b>How it works:</b> no discount is entered. Then "+taxTxt;
   }else if(i0>=0){
     var nm=rows[i0].querySelector(".nm").value||"Item";
     var pc=(a[i0]/S*100).toFixed(1);
-    ex="<b>How it works:</b> the "+f(Math.min(Math.round(dv*100),S))+" discount is shared by price. <b>"+nm.replace(/</g,"&lt;")+"</b> is "+pc+"% of the total ("+f(a[i0])+" of "+f(S)+"), so it takes "+pc+"% of the discount = <b>"+f(d[i0])+"</b>. Then "+taxTxt;
+    ex="<b>How it works:</b> the "+f(D)+" discount is shared by price. <b>"+nm.replace(/</g,"&lt;")+"</b> is "+pc+"% of the total ("+f(a[i0])+" of "+f(S)+"), so it takes "+pc+"% of the discount = <b>"+f(d[i0])+"</b>. Then "+taxTxt;
   }else ex="Enter a price for at least one item to see how the discount is shared.";
   $("explain").innerHTML=ex;
 }
@@ -319,14 +335,9 @@ function calc(){
 $("mode").addEventListener("change",function(){
   var p=this.value==="percent";
   $("discLabel").textContent=p?"Discount (%)":"Total discount amount (₹)";
-  $("disc").value=p?10:500;
   calc();
 });
-$("taxType").addEventListener("change",function(){
-  $("tax").value=this.value==="percent"?16:0;
-  calc();
-});
-$("add").addEventListener("click",function(){addRow("",0,true);calc();});
+$("add").addEventListener("click",function(){addRow("","",true);calc();});
 rowsEl.addEventListener("click",function(e){
   var b=e.target.closest&&e.target.closest("button.x");
   if(b){b.closest("tr").remove();calc();return;}
@@ -357,6 +368,7 @@ rowsEl.addEventListener("focusin",function(e){        /* clicking back in restor
 /* ---------- Calculation details popup (the ⓘ icon) ---------- */
 var pop=$("pop"),openRow=null,openBtn=null,ctx=null;
 var esc=function(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})};
+var sgn=function(c){return (c<0?" − ":" + ")+f(Math.abs(c))};
 var L=function(label,html,cls){return '<div class="pl '+(cls||"")+'"><span>'+label+'</span><b>'+html+'</b></div>'};
 function closePop(){
   pop.hidden=true;
@@ -377,6 +389,7 @@ function placePop(){
 }
 function inputNote(label,R){
   if(R.bad)return '<div class="pe">'+label+' "'+esc(R.expr)+'" is not valid and was counted as 0.</div>';
+  if(R.src!==undefined){return (R.empty||/^[\d.,\s]+$/.test(R.expr))?"":'<div class="pn">'+label+' entered as '+esc(R.expr.trim())+'</div>';}
   if(R.plain||R.empty)return "";
   return '<div class="pn">'+label+' entered as '+esc(R.expr)+' ('+esc(R.pretty)+' = '+num(R.v)+')'+(R.notes.length?' - '+esc(R.notes.join("; ")):"")+'</div>';
 }
@@ -399,12 +412,24 @@ function renderPop(){
     h+=L("Discount",f(ctx.Dtot)+" total × "+sh+"% = "+f(i.d),"d")+inputNote("Discount",ctx.dvR);
   }
   h+=L("After discount",f(i.a)+" − "+f(i.d)+" = "+f(i.ad));
-  if(ctx.taxType==="percent"){
-    h+=L("Tax",f(i.ad)+" × "+num(ctx.trR.v)+"% = "+f(i.tx),"t")+inputNote("Tax %",ctx.trR);
+  var A=ctx.adj;
+  h+=L("Amount","₹"+f(i.ad));
+  if(A.empty||A.bad){
+    h+=L("Tax","none","t");
   }else{
-    h+=L("Tax","fixed "+f(Math.round(ctx.trR.v*100))+" × ("+f(i.ad)+" ÷ "+f(ctx.ADs)+") = "+f(i.tx),"t")+inputNote("Tax",ctx.trR);
+    h+=L(A.k!==0?"Tax":"Adjustment",esc(A.norm),"t");
+    var calcTxt,B=(i.ad/100).toFixed(2);
+    if(A.c!==0&&ctx.nShare>1){
+      calcTxt=f(i.ad)+(A.k!==0?sgn(i.kp):"")+sgn(i.cs);
+      if(A.k!==0)h+='<div class="pn">Percent part: '+num(A.k*100)+'% of '+f(i.ad)+' = '+f(i.kp)+'</div>';
+      h+='<div class="pn">Fixed part '+(ctx.C<0?"−":"+")+f(Math.abs(ctx.C))+' is split by price: '+f(i.ad)+' ÷ '+f(ctx.ADs)+' → '+f(i.cs)+'</div>';
+    }else{
+      var ev=evaluate(B+A.src,false);
+      calcTxt=f(i.ad)+ev.pretty.slice(B.length);
+    }
+    h+=L("Calculation",esc(calcTxt)+" = "+f(i.fin));
   }
-  h+=L("You pay",f(i.ad)+" + "+f(i.tx)+" = "+f(i.fin),"f");
+  h+=L("Final Amount","₹"+f(i.fin),"f");
   pop.innerHTML=h;placePop();
 }
 document.addEventListener("click",function(e){
@@ -429,12 +454,12 @@ document.addEventListener("keyup",function(e){
   if(e.key==="Alt"&&altSolo){
     altSolo=false;
     e.preventDefault();            /* stops the browser menu bar from grabbing focus on Windows */
-    addRow("",0,true);calc();
+    addRow("","",true);calc();
   }
 });
 
 /* ---------- Start ---------- */
-addRow("Item 1",2619.61);addRow("Item 2",1200);addRow("Item 3",850.5);
+/* Items list starts completely empty: no sample rows. Add items with the button or the Alt key. */
 calc();
 </script>
 </body></html>
