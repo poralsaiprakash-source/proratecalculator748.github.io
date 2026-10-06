@@ -117,7 +117,7 @@ tfoot td:nth-child(6){color:var(--tax);background:var(--tax-bg)}
 <table>
 <thead><tr><th>Item</th><th>Price (₹)</th><th>% of total</th><th>Discount (−)</th><th>Price after discount</th><th id="taxHead">Tax / Adj. (±)</th><th>You pay</th><th></th></tr></thead>
 <tbody id="rows"></tbody>
-<tfoot><tr><td>Total</td><td id="tA">0.00</td><td id="tS">0%</td><td id="tD">0.00</td><td id="tAD">0.00</td><td id="tT">0.00</td><td id="tF">0.00</td><td></td></tr></tfoot>
+<tfoot><tr><td>Total</td><td id="tA">0.000</td><td id="tS">0%</td><td id="tD">0.000</td><td id="tAD">0.000</td><td id="tT">0.000</td><td id="tF">0.000</td><td></td></tr></tfoot>
 </table>
 </div>
 <div class="hint" id="empty" style="padding:12px 4px">No items yet. Click <b>+ Add item</b> or tap <kbd>Alt</kbd> to add a blank row.</div>
@@ -128,21 +128,21 @@ tfoot td:nth-child(6){color:var(--tax);background:var(--tax-bg)}
 
 <div class="step"><i>3</i>See the result</div>
 <div class="cards">
-  <div class="card c1"><span>Original total</span><strong id="sO">0.00</strong></div>
-  <div class="card c2"><span>Total discount</span><strong id="sD">0.00</strong></div>
-  <div class="card c3"><span>After discount</span><strong id="sAD">0.00</strong></div>
-  <div class="card c4"><span id="sTL">Total tax / adj.</span><strong id="sT">0.00</strong></div>
+  <div class="card c1"><span>Original total</span><strong id="sO">0.000</strong></div>
+  <div class="card c2"><span>Total discount</span><strong id="sD">0.000</strong></div>
+  <div class="card c3"><span>After discount</span><strong id="sAD">0.000</strong></div>
+  <div class="card c4"><span id="sTL">Total tax / adj.</span><strong id="sT">0.000</strong></div>
 </div>
-<div class="final"><span>Final total to pay</span><b id="sF">0.00</b></div>
+<div class="final"><span>Final total to pay</span><b id="sF">0.000</b></div>
 </div>
-<p class="note">Rounded to cents. Any leftover cent goes to the item with the biggest remainder, so the parts always add up exactly.</p>
+<p class="note">Rounded to 3 decimals. Any leftover 0.001 goes to the item with the biggest remainder, so the parts always add up exactly.</p>
 </div>
 
 <div id="pop" class="pop" role="dialog" aria-label="Calculation details" hidden></div>
 <script>
 var rowsEl=document.getElementById("rows"),n=0;
 var $=function(id){return document.getElementById(id)};
-var f=function(c){return (c/100).toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2})};
+var f=function(c){return (c/1000).toLocaleString("en-IN",{minimumFractionDigits:3,maximumFractionDigits:3})};
 
 /* ---------- Safe formula evaluator (no eval) ----------
    Grammar: expr = term {(+|-) term}; term = unary {(*|/|%) unary};
@@ -210,7 +210,7 @@ function readField(input,evEl,pctField){
   var r=evaluate(src,pctField),ok=!isNaN(r.v);
   input.classList.toggle("bad",!ok);
   if(evEl){evEl.classList.toggle("bad",!ok);
-    evEl.textContent=!ok?"Invalid formula":(r.plain||r.empty?"":"= "+(Math.round(r.v*100)/100).toFixed(2));}
+    evEl.textContent=!ok?"Invalid formula":(r.plain||r.empty?"":"= "+(Math.round(r.v*1000)/1000).toFixed(3));}
   r.bad=!ok;r.expr=src;if(!ok)r.v=0;
   return r;
 }
@@ -230,7 +230,7 @@ function readAdj(input,evEl,isDisc){
   input.classList.toggle("bad",res.bad);
   var parts=[];
   if(res.k!==0){var kp=Math.round(res.k*1e6)/1e4;parts.push((kp<0?"−":"+")+Math.abs(kp)+(isDisc?"% of the total bill":"% of each item"));}
-  if(res.c!==0)parts.push((res.c<0?"−":"+")+Math.abs(Math.round(res.c*100)/100).toFixed(2)+(isDisc?" fixed":" fixed, shared by price"));
+  if(res.c!==0)parts.push((res.c<0?"−":"+")+Math.abs(Math.round(res.c*1000)/1000).toFixed(3)+(isDisc?" fixed":" fixed, shared by price"));
   evEl.classList.toggle("bad",res.bad);
   evEl.textContent=res.bad?"Invalid formula":(res.empty?"":parts.join("; ")||"No change");
   return res;
@@ -251,7 +251,7 @@ function addRow(name,amt,focus){
   var tr=document.createElement("tr");
   tr.innerHTML='<td><input type="text" class="nm" placeholder="Item name / description" autocomplete="off"></td>'+
     '<td><div class="amtbox"><input type="text" inputmode="decimal" autocomplete="off" class="amt" placeholder="e.g. 100*5+20"><button class="inf" type="button" aria-label="Show calculation" aria-expanded="false" title="Show calculation">&#9432;</button></div><span class="ev"></span></td>'+
-    '<td class="sh">0%</td><td class="d">0.00</td><td class="ad">0.00</td><td class="tx">0.00</td><td class="fi">0.00</td>'+
+    '<td class="sh">0%</td><td class="d">0.000</td><td class="ad">0.000</td><td class="tx">0.000</td><td class="fi">0.000</td>'+
     '<td><button class="x" aria-label="Remove item">&#10005;</button></td>';
   if(name)tr.querySelector(".nm").value=name;   /* stays blank unless a name is given */
   if(amt!=null&&amt!=="")tr.querySelector(".amt").value=amt;   /* blank by default */
@@ -271,7 +271,7 @@ function calc(){
     if(x.bad)anyBad=true;
     r._i={x:x,name:r.querySelector(".nm").value||"Item"};
     return x});
-  var a=infos.map(function(x){return Math.round(x.v*100)});
+  var a=infos.map(function(x){return Math.round(x.v*1000)});
   var S=a.reduce(function(x,y){return x+y},0), err="";
   var d=a.map(function(){return 0});
 
@@ -280,7 +280,7 @@ function calc(){
     d=a.map(function(x){return Math.round(x*dv/100)});
   }else{
     /* manual total discount: fixed part + percent of the total bill, e.g. 100, +100, 10%, 100+50, (500-100)/2 */
-    var D=Math.round(dvR.c*100+dvR.k*S);
+    var D=Math.round(dvR.c*1000+dvR.k*S);
     if(D>S&&S>0){D=S;err="Discount is larger than the total, so it was capped at "+f(S)+".";}
     d=share(Math.abs(D),a).map(function(x){return D<0?-x:x});
   }
@@ -289,7 +289,7 @@ function calc(){
 
   /* tax / adjustment: k = percent-like part (per item), c = fixed part (shared by discounted price) */
   var kp=ad.map(function(x){return Math.round(x*trR.k)});
-  var C=Math.round(trR.c*100);
+  var C=Math.round(trR.c*1000);
   var cs=share(Math.abs(C),ad).map(function(x){return C<0?-x:x});
   var nShare=ad.filter(function(x){return x>0}).length;
   var tx=ad.map(function(x,i){return kp[i]+cs[i]});
@@ -353,7 +353,7 @@ rowsEl.addEventListener("keydown",function(e){
   var src=inp.dataset.expr||inp.value,r=evaluate(src,false);
   if(!isNaN(r.v)&&!r.plain&&!r.empty){
     inp.dataset.expr=src;
-    inp.value=(Math.round(r.v*100)/100).toFixed(2);
+    inp.value=(Math.round(r.v*1000)/1000).toFixed(3);
   }
   calc();inp.select();
 });
@@ -403,7 +403,7 @@ function renderPop(){
     h+=L("You entered",esc(x.expr.trim()||"(empty)"));
     h+=L("Calculation",(x.plain||x.empty)?esc(num(x.v))+" (entered directly)":esc(x.pretty)+" = "+esc(num(x.v)));
     if(x.notes.length)h+='<div class="pn">'+esc(x.notes.join("; "))+'</div>';
-    if(Math.abs(i.a-x.v*100)>1e-6)h+='<div class="pn">Used as '+f(i.a)+' (rounded to cents)</div>';
+    if(Math.abs(i.a-x.v*1000)>1e-6)h+='<div class="pn">Used as '+f(i.a)+' (rounded to 3 decimals)</div>';
   }
   h+=L("Share of total",f(i.a)+" ÷ "+f(ctx.S)+" = "+sh+"%");
   if(ctx.mode==="percent"){
@@ -418,7 +418,7 @@ function renderPop(){
     h+=L("Tax","none","t");
   }else{
     h+=L(A.k!==0?"Tax":"Adjustment",esc(A.norm),"t");
-    var calcTxt,B=(i.ad/100).toFixed(2);
+    var calcTxt,B=(i.ad/1000).toFixed(3);
     if(A.c!==0&&ctx.nShare>1){
       calcTxt=f(i.ad)+(A.k!==0?sgn(i.kp):"")+sgn(i.cs);
       if(A.k!==0)h+='<div class="pn">Percent part: '+num(A.k*100)+'% of '+f(i.ad)+' = '+f(i.kp)+'</div>';
